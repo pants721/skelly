@@ -17,10 +17,10 @@ pub fn path_buf_filename(path: &Path) -> Result<String> {
     Ok(path.file_name().unwrap().to_str().unwrap().to_string())
 }
 
-pub fn path_buf_to_string(p: &Path) -> Result<String> {
-    match p.to_str() {
+pub fn path_buf_to_string(path: &Path) -> Result<String> {
+    match path.to_str() {
         Some(s) => Ok(s.to_string()),
-        None => Err(anyhow!("could not convert string to PathBuf")),
+        None => Err(anyhow!("could not convert path to string")),
     }
 }
 
@@ -49,10 +49,14 @@ pub fn copy_recursively(source: &Path, destination: &Path) -> Result<()> {
     Ok(())
 }
 
-pub fn replace_string_in_dir(input_path: &PathBuf, from: &str, to: &str) -> Result<()> {
+pub fn replace_string_in_dir(input_path: &Path, from: &str, to: &str) -> Result<()> {
     if input_path.is_file() {
-        replace_string_in_file(input_path, from, to)
-            .with_context(|| format!("failed to replace placeholder string in {}", input_path.display()))?;
+        replace_string_in_file(input_path, from, to).with_context(|| {
+            format!(
+                "failed to replace placeholder string in {}",
+                input_path.display()
+            )
+        })?;
         return Ok(());
     }
 
@@ -66,16 +70,25 @@ pub fn replace_string_in_dir(input_path: &PathBuf, from: &str, to: &str) -> Resu
                 continue; // Skip to the next entry if there's an error
             }
         };
-        
+
         let entry_path = entry.path();
         if entry_path.is_dir() {
             if let Err(e) = replace_string_in_dir(&entry_path, from, to) {
-                eprintln!("{}", e.context(format!("failed to replace string in {}", entry_path.display())));
+                eprintln!(
+                    "{}",
+                    e.context(format!(
+                        "failed to replace string in {}",
+                        entry_path.display()
+                    ))
+                );
             }
         } else if let Err(e) = replace_string_in_file(&entry_path, from, to) {
             eprintln!(
-                "{}", 
-                &e.context(format!("failed to replace string in {}", entry_path.display()))
+                "{}",
+                &e.context(format!(
+                    "failed to replace string in {}",
+                    entry_path.display()
+                ))
             );
         }
     }
@@ -90,7 +103,7 @@ fn is_executable(path: &Path) -> Result<bool> {
     Ok(permissions.mode() & 0o111 != 0)
 }
 
-pub fn replace_string_in_file(path: &PathBuf, from: &str, to: &str) -> Result<()> {
+pub fn replace_string_in_file(path: &Path, from: &str, to: &str) -> Result<()> {
     if is_executable(path)? {
         return Err(anyhow!("{} is executable", path.display()));
     }
@@ -109,7 +122,7 @@ pub fn replace_string_in_file(path: &PathBuf, from: &str, to: &str) -> Result<()
 }
 
 /// returns new path
-pub fn replace_string_in_filename(path: &PathBuf, from: &str, to: &str) -> Result<PathBuf> {
+pub fn replace_string_in_filename(path: &Path, from: &str, to: &str) -> Result<PathBuf> {
     let file_name = path_buf_filename(path)?;
     // we use this and not Path::file_stem() because we want PLACEHOLDER.tar.gz to convert to
     // REPLACED.tar.gz not REPLACED.gz
@@ -123,15 +136,16 @@ pub fn replace_string_in_filename(path: &PathBuf, from: &str, to: &str) -> Resul
     Ok(path.to_path_buf())
 }
 
-pub fn replace_string_in_filenames(path: &PathBuf, from: &str, to: &str) -> Result<()> {
+pub fn replace_string_in_filenames(path: &Path, from: &str, to: &str) -> Result<()> {
     let new_path = replace_string_in_filename(path, from, to)?;
     if new_path.is_dir() {
-        for entry in fs::read_dir(&new_path).with_context(|| format!("failed to read {}", &new_path.display()))?
+        for entry in fs::read_dir(&new_path)
+            .with_context(|| format!("failed to read {}", &new_path.display()))?
             .flatten()
-            {
-                let entry_path = entry.path();
-                replace_string_in_filenames(&entry_path, from, to)?;
-            }
+        {
+            let entry_path = entry.path();
+            replace_string_in_filenames(&entry_path, from, to)?;
+        }
     }
     Ok(())
 }
